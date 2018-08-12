@@ -167,15 +167,18 @@ lock_create(const char *name)
 	lock->is_locked = 0;
 	lock->thread = NULL;
 
+	// Extra check to be 100% sure that everything is initialized :)
+	KASSERT(!lock->is_locked && lock->thread == NULL);
+
 	return lock;
 }
 
 void
 lock_destroy(struct lock *lock)
 {
-	KASSERT(lock != NULL && lock->thread == NULL);
+	KASSERT(lock != NULL && !lock->is_locked);
 
-	/* wchan_cleanup will assert if anyone's waiting on it */
+	/* wchan_cleanup will assert if anyone's waiting on it, see thread.c for details */
 	spinlock_cleanup(&lock->lk_lock);
 	wchan_destroy(lock->lk_wchan);
 	kfree(lock->lk_name);
@@ -192,6 +195,8 @@ lock_acquire(struct lock *lock)
 	spinlock_acquire(&lock->lk_lock);
 	
 	while (lock->is_locked) {
+		// Since lock is already locked, we should sleep in wait channel.
+		// NOTE: acquire spinlock BEFORE checking lock and release it AFTER actual locking.
 		wchan_sleep(lock->lk_wchan, &lock->lk_lock);
 	}
 
@@ -203,7 +208,9 @@ lock_acquire(struct lock *lock)
 void
 lock_release(struct lock *lock)
 {
-	KASSERT(lock != NULL && lock->thread == curthread);
+	KASSERT(lock != NULL);
+	// If current thread is not holding lock, it can not release it, so panic.
+	KASSERT(lock->is_locked && lock->thread == curthread);
 	
 	spinlock_acquire(&lock->lk_lock);
 	lock->is_locked = 0;

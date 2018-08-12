@@ -72,6 +72,13 @@ void V(struct semaphore *);
  *
  * The name field is for easier debugging. A copy of the name is
  * (should be) made internally.
+ * 
+ * Implementation: 
+ *
+ * Lock is implemented with volatile boolean field, that is able to 
+ * change atomically. 
+ * It includes spinlock to protect it's state and to be able to use
+ * waiting channel for awaiting threads.
  */
 struct lock {
         char *lk_name;
@@ -79,7 +86,7 @@ struct lock {
         struct wchan *lk_wchan;
         struct spinlock lk_lock;
         struct thread *thread;
-        bool is_locked;
+        volatile bool is_locked;
 };
 
 struct lock *lock_create(const char *name);
