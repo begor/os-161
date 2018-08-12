@@ -78,7 +78,7 @@ struct lock {
         HANGMAN_LOCKABLE(lk_hangman);   /* Deadlock detector hook. */
         struct wchan *lk_wchan;
         struct spinlock lk_lock;
-        struct thread *current_thread;
+        struct thread *thread;
         bool is_locked;
 };
 
