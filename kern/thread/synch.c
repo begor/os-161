@@ -276,8 +276,8 @@ cv_wait(struct cv *cv, struct lock *lock)
 {
 	KASSERT(cv != NULL && lock_do_i_hold(lock));
 
-	lock_release(lock);
 	spinlock_acquire(&cv->cv_lock);
+	lock_release(lock);
 	wchan_sleep(cv->cv_wchan, &cv->cv_lock);
 	spinlock_release(&cv->cv_lock);
 	lock_acquire(lock);
