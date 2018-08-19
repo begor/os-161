@@ -376,3 +376,19 @@ rwlock_destroy(struct rwlock *rwlock)
 	kfree(rwlock->rwlock_name);
 	kfree(rwlock);
 }
+
+
+void 
+rwlock_acquire_read(struct rwlock *rwlock)
+{
+	KASSERT(rwlock != NULL);
+
+	spinlock_acquire(&rwlock->rwlock_lock);
+	lock_acquire(rwlock->rwlock_write_lock);
+	threadlist_addtail(rwlock->rwlock_reader_threads, curthread);
+	lock_release(rwlock->rwlock_write_lock);
+	spinlock_release(&rwlock->rwlock_lock);
+}
+
+void 
+rwlock_release_read(struct rwlock *rwlock);

@@ -157,7 +157,8 @@ void cv_broadcast(struct cv *cv, struct lock *lock);
  * The name field is for easier debugging. A copy of the name is
  * (should be) made internally.
  */
-
+// TODO: store linked list of perations (read->read->write->read->write->read->...)
+// and use it like a queue for fairness
 struct rwlock {
         char *rwlock_name;
         struct spinlock rwlock_lock;
