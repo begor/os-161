@@ -157,15 +157,13 @@ void cv_broadcast(struct cv *cv, struct lock *lock);
  * The name field is for easier debugging. A copy of the name is
  * (should be) made internally.
  */
-// TODO: store linked list of perations (read->read->write->read->write->read->...)
-// and use it like a queue for fairness
 struct rwlock {
         char *rwlock_name;
-        struct spinlock rwlock_lock;
+        struct spinlock *rwlock_lock;
         struct lock *rwlock_write_lock;
-        struct threadlist *rwlock_reader_threads;
-        struct wchan *rwlock_read_wchan;
-        struct wchan *rwlock_write_wchan;
+        struct cv *rwlock_read_cv;
+        struct cv *rwlock_write_cv;
+        volatile unsigned readers;
 };
 
 struct rwlock * rwlock_create(const char *);

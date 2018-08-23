@@ -112,7 +112,7 @@ P(struct semaphore *sem)
 		 *
 		 * Exercise: how would you implement strict FIFO
 		 * ordering?
-		 */
+		 */KASSERT(rwlock != NULL);
 		wchan_sleep(sem->sem_wchan, &sem->sem_lock);
 	}
 	KASSERT(sem->sem_count > 0);
@@ -186,7 +186,7 @@ lock_destroy(struct lock *lock)
 }
 
 void
-lock_acquire(struct lock *lock)
+lock_acquire(struct lock *lock)KASSERT(rwlock != NULL);
 {
 	KASSERT(lock != NULL);
 
@@ -329,35 +329,35 @@ rwlock_create(const char *name)
 		return NULL;
 	}
 
-	threadlist_init(rwlock->rwlock_reader_threads);
-	if (rwlock->rwlock_reader_threads == NULL) {
+
+	rwlock->rwlock_write_cv = cv_create(rwlock->rwlock_name);
+	if (rwlock->rwlock_write_cv == NULL) {
 		kfree(rwlock->rwlock_name);
 		kfree(rwlock);
 		return NULL;
 	}
 
-	rwlock->rwlock_read_wchan = wchan_create(rwlock->rwlock_name);
-	if (rwlock->rwlock_read_wchan == NULL) {
+
+	rwlock->rwlock_read_cv = cv_create(rwlock->rwlock_name);
+	if (rwlock->rwlock_read_cv == NULL) {
+		cv_destroy(rwlock->rwlock_write_cv);
 		kfree(rwlock->rwlock_name);
 		kfree(rwlock);
 		return NULL;
 	}
 
-	rwlock->rwlock_write_wchan = wchan_create(rwlock->rwlock_name);
-	if (rwlock->rwlock_write_wchan == NULL) {
-		kfree(rwlock->rwlock_name);
-		kfree(rwlock);
-		return NULL;
-	}
 
 	rwlock->rwlock_write_lock = lock_create(rwlock->rwlock_name);
 	if (rwlock->rwlock_write_lock == NULL) {
+		// TODO: check other create functions for proper clean-ups
+		cv_destroy(rwlock->rwlock_write_cv);
+		cv_destroy(rwlock->rwlock_read_cv);
 		kfree(rwlock->rwlock_name);
 		kfree(rwlock);
-		return NULL;
 	}
 
 	spinlock_init(&rwlock->rwlock_lock);
+	rwlock->readers_count = 0;
 
 	return rwlock;
 }
@@ -369,10 +369,9 @@ rwlock_destroy(struct rwlock *rwlock)
 	KASSERT(rwlock != NULL);
 
 	spinlock_cleanup(&rwlock->rwlock_lock);
-	wchan_destroy(rwlock->rwlock_read_wchan);
-	wchan_destroy(rwlock->rwlock_write_wchan);
+	cv_destroy(rwlock->rwlock_write_cv);
+	cv_destroy(rwlock->rwlock_read_cv);
 	lock_destroy(rwlock->rwlock_write_lock);
-	threadlist_cleanup(rwlock->rwlock_reader_threads);
 	kfree(rwlock->rwlock_name);
 	kfree(rwlock);
 }
@@ -383,12 +382,53 @@ rwlock_acquire_read(struct rwlock *rwlock)
 {
 	KASSERT(rwlock != NULL);
 
+	lock_acquire(rwlock->rwlock_writer_lock);
+	cv_broadcast(rwlock->rwlock_read_cv, rwlock->rwlock_writer_lock);
+	readers++;
+	lock_release(rwlock->rwlock_writer_lock);
 	spinlock_acquire(&rwlock->rwlock_lock);
-	lock_acquire(rwlock->rwlock_write_lock);
-	threadlist_addtail(rwlock->rwlock_reader_threads, curthread);
-	lock_release(rwlock->rwlock_write_lock);
-	spinlock_release(&rwlock->rwlock_lock);
 }
 
 void 
-rwlock_release_read(struct rwlock *rwlock);
+rwlock_release_read(struct rwlock *rwlock)
+{
+	KASSERT(rwlock != NULL);
+
+	spinlock_acquire(&rwlock->rwlock_lock);
+	KASSERT(rwlock->readers > 0);
+	rwlock->readers--;
+
+	if (rwlock->readers == 0) {
+		lock_acquire(rwlock->rwlock_writer_lock);
+		cv_signal(rwlock->rwlock_write_cv, rwlock_writer_lock);
+		lock_release(rwlokc->rwlock_writer_lock);
+	}
+	
+	spinlock_release(&rwlock->rwlock_lock);
+}	
+
+
+void 
+rwlock_acquire_write(struct rwlock *rwlock)
+{
+	KASSERT(rwlock != NULL);
+
+	lock_acquire(rwlock->rwlock_writer_lock);
+
+	while(rwlock->readers > 0) {
+		cv_wait(rwlock->rwlock_write_cv, rwlock->rwlock_writer_lock);
+	}
+}
+
+
+void 
+rwlock_release_write(struct rwlock *)
+{
+	KASSERT(rwlock != NULL && lock_do_i_hold(rwlock->rwlock_writer_lock));
+
+	while(rwlock->readers > 0) {
+		cv_broadcast(rwlock->rwlock_read_cv, rwlock->rwlock_writer_lock);
+	}
+
+	lock_release(rwlock->rwlock_writer_lock);
+}
