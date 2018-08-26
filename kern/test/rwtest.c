@@ -22,6 +22,8 @@ static struct rwlock *testlock = NULL;
 
 struct spinlock status_lock;
 static volatile unsigned long testval1;
+static volatile unsigned long testval2;
+static volatile unsigned long testval3;
 
 static
 void
@@ -58,16 +60,51 @@ rwlocktestwritethread(void *junk, unsigned long num)
 	int i;
 
 	for (i=0; i<TESTLOOPS; i++) {
-		random_yielder(4);
 		rwlock_acquire_write(testlock);
+		random_yielder(4);
 
-		testval1 += 1;
-		
+		testval1 = num;
+		testval2 = num*num;
+		testval3 = num%3;
+
+		if (testval2 != testval1*testval1) {
+			goto fail;
+		}
+		random_yielder(4);
+
+		if (testval2%3 != (testval3*testval3)%3) {
+			goto fail;
+		}
+		random_yielder(4);
+
+		if (testval3 != testval1%3) {
+			goto fail;
+		}
+		random_yielder(4);
+
+		if (testval1 != num) {
+			goto fail;
+		}
+		random_yielder(4);
+
+		if (testval2 != num*num) {
+			goto fail;
+		}
+		random_yielder(4);
+
+		if (testval3 != num%3) {
+			goto fail;
+		}
+		random_yielder(4);
+
 		rwlock_release_write(testlock);
 	}
 
 	V(donesem);
 	return;
+
+fail:
+	rwlock_release_write(testlock);
 }
 
 int rwtest(int nargs, char **args) {
@@ -151,8 +188,6 @@ int rwtest2(int nargs, char **args) {
 		kprintf_t(".");
 		P(donesem);
 	}
-
-	KASSERT(testval1 == NTHREADS * TESTLOOPS);
 
 	rwlock_destroy(testlock);
 	sem_destroy(donesem);
