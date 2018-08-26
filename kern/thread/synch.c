@@ -418,5 +418,5 @@ rwlock_release_write(struct rwlock *rwlock)
 	KASSERT(rwlock != NULL);
 
 	lock_release(rwlock->rwlock_read_available);
-	lock_acquire(rwlock->rwlock_writer);
+	lock_release(rwlock->rwlock_writer);
 }

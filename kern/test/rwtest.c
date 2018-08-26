@@ -25,7 +25,7 @@ static volatile unsigned long testval1;
 
 static
 void
-rwlocktestthread(void *junk, unsigned long num)
+rwlocktestreadthread(void *junk, unsigned long num)
 {
 	(void)junk;
 	(void)num;
@@ -48,13 +48,35 @@ rwlocktestthread(void *junk, unsigned long num)
 	return;
 }
 
+static
+void
+rwlocktestwritethread(void *junk, unsigned long num)
+{
+	(void)junk;
+	(void)num;
+
+	int i;
+
+	for (i=0; i<TESTLOOPS; i++) {
+		random_yielder(4);
+		rwlock_acquire_write(testlock);
+
+		testval1 += 1;
+		
+		rwlock_release_write(testlock);
+	}
+
+	V(donesem);
+	return;
+}
+
 int rwtest(int nargs, char **args) {
 	(void)nargs;
 	(void)args;
 
 	int i, result;
 
-	kprintf_n("Starting rwt1 (test read lock)...\n");
+	kprintf_n("Starting rwt1...\n");
 	for (i=0; i<CREATELOOPS; i++) {
 		kprintf_t(".");
 		testlock = rwlock_create("testlock");
@@ -75,7 +97,7 @@ int rwtest(int nargs, char **args) {
 
 	for (i=0; i<NTHREADS; i++) {
 		kprintf_t(".");
-		result = thread_fork("synchtest", NULL, rwlocktestthread, NULL, i);
+		result = thread_fork("synchtest", NULL, rwlocktestreadthread, NULL, i);
 		if (result) {
 			panic("rwt1: thread_fork failed: %s\n", strerror(result));
 		}
@@ -103,8 +125,42 @@ int rwtest2(int nargs, char **args) {
 	(void)nargs;
 	(void)args;
 
-	kprintf_n("rwt2 unimplemented\n");
-	success(TEST161_FAIL, SECRET, "rwt2");
+	int i, result;
+
+	kprintf_n("Starting rwt2...\n");
+	testlock = rwlock_create("testlock");
+	if (testlock == NULL) {
+		panic("rwt1: lock_create failed\n");
+	}
+	donesem = sem_create("donesem", 0);
+	if (donesem == NULL) {
+		panic("rwt1: sem_create failed\n");
+	}
+	spinlock_init(&status_lock);
+	test_status = TEST161_SUCCESS;
+
+	for (i=0; i<NTHREADS; i++) {
+		kprintf_t(".");
+		result = thread_fork("synchtest", NULL, rwlocktestwritethread, NULL, i);
+		if (result) {
+			panic("rwt1: thread_fork failed: %s\n", strerror(result));
+		}
+	}
+
+	for (i=0; i<NTHREADS; i++) {
+		kprintf_t(".");
+		P(donesem);
+	}
+
+	KASSERT(testval1 == NTHREADS * TESTLOOPS);
+
+	rwlock_destroy(testlock);
+	sem_destroy(donesem);
+	testlock = NULL;
+	donesem = NULL;
+
+	kprintf_t("\n");
+	success(test_status, SECRET, "rwt1");
 
 	return 0;
 }
