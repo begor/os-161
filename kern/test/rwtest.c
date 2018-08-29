@@ -26,6 +26,17 @@ static volatile unsigned long testval2;
 static volatile unsigned long testval3;
 
 static
+bool
+failif(bool condition) {
+	if (condition) {
+		spinlock_acquire(&status_lock);
+		test_status = TEST161_FAIL;
+		spinlock_release(&status_lock);
+	}
+	return condition;
+}
+
+static
 void
 rwlocktestreadthread(void *junk, unsigned long num)
 {
@@ -58,6 +69,8 @@ rwlocktestwritethread(void *junk, unsigned long num)
 	(void)num;
 
 	int i;
+
+	kprintf_n("Thread: %21lu\n", num);
 
 	for (i=0; i<TESTLOOPS; i++) {
 		rwlock_acquire_write(testlock);
@@ -105,6 +118,9 @@ rwlocktestwritethread(void *junk, unsigned long num)
 
 fail:
 	rwlock_release_write(testlock);
+	failif(true);
+	V(donesem);
+	return;
 }
 
 int rwtest(int nargs, char **args) {
@@ -167,20 +183,20 @@ int rwtest2(int nargs, char **args) {
 	kprintf_n("Starting rwt2...\n");
 	testlock = rwlock_create("testlock");
 	if (testlock == NULL) {
-		panic("rwt1: lock_create failed\n");
+		panic("rwt2: lock_create failed\n");
 	}
 	donesem = sem_create("donesem", 0);
 	if (donesem == NULL) {
-		panic("rwt1: sem_create failed\n");
+		panic("rwt2: sem_create failed\n");
 	}
 	spinlock_init(&status_lock);
 	test_status = TEST161_SUCCESS;
 
 	for (i=0; i<NTHREADS; i++) {
 		kprintf_t(".");
-		result = thread_fork("synchtest", NULL, rwlocktestwritethread, NULL, i);
+		result = thread_fork("rwtest", NULL, rwlocktestwritethread, NULL, i);
 		if (result) {
-			panic("rwt1: thread_fork failed: %s\n", strerror(result));
+			panic("rwt2: thread_fork failed: %s\n", strerror(result));
 		}
 	}
 
@@ -195,7 +211,7 @@ int rwtest2(int nargs, char **args) {
 	donesem = NULL;
 
 	kprintf_t("\n");
-	success(test_status, SECRET, "rwt1");
+	success(test_status, SECRET, "rwt2");
 
 	return 0;
 }
