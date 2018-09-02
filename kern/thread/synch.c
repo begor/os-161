@@ -209,10 +209,9 @@ void
 lock_release(struct lock *lock)
 {
 	KASSERT(lock != NULL);
-	// If current thread is not holding lock, it can not release it, so panic.
-	KASSERT(lock->is_locked && lock->thread == curthread);
 	
 	spinlock_acquire(&lock->lk_lock);
+	KASSERT(lock->is_locked);
 	lock->is_locked = 0;
 	lock->thread = NULL;
 	wchan_wakeone(lock->lk_wchan, &lock->lk_lock);
@@ -307,4 +306,117 @@ cv_broadcast(struct cv *cv, struct lock *lock)
 	wchan_wakeall(cv->cv_wchan, &cv->cv_lock);
 	
 	spinlock_release(&cv->cv_lock);
+}
+
+////////////////////////////////////////////////////////////
+//
+// RWLock
+
+struct rwlock *
+rwlock_create(const char *name) 
+{
+	struct rwlock *rwlock;
+
+	rwlock = kmalloc(sizeof(*rwlock));
+	if (rwlock == NULL) {
+		return NULL;
+	}
+
+	rwlock->rwlock_name = kstrdup(name);
+	if (rwlock->rwlock_name==NULL) {
+		kfree(rwlock);
+		return NULL;
+	}
+
+	rwlock->rwlock_lock = lock_create(rwlock->rwlock_name);
+	if (rwlock->rwlock_lock == NULL) {
+		// TODO: check other create functions for proper clean-ups
+		kfree(rwlock->rwlock_name);
+		kfree(rwlock);
+	}
+
+	rwlock->rwlock_writer = lock_create(rwlock->rwlock_name);
+	if (rwlock->rwlock_writer == NULL) {
+		lock_destroy(rwlock->rwlock_lock);
+		kfree(rwlock->rwlock_name);
+		kfree(rwlock);
+	}
+
+	rwlock->rwlock_read_available = lock_create(rwlock->rwlock_name);
+	if (rwlock->rwlock_read_available == NULL) {
+		lock_destroy(rwlock->rwlock_lock);
+		lock_destroy(rwlock->rwlock_writer);
+		kfree(rwlock->rwlock_name);
+		kfree(rwlock);
+	}
+
+	rwlock->readers = 0;
+
+	return rwlock;
+}
+
+
+void 
+rwlock_destroy(struct rwlock *rwlock)
+{
+	KASSERT(rwlock != NULL);
+
+	lock_destroy(rwlock->rwlock_lock);
+	lock_destroy(rwlock->rwlock_writer);
+	lock_destroy(rwlock->rwlock_read_available);
+	kfree(rwlock->rwlock_name);
+	kfree(rwlock);
+}
+
+
+void 
+rwlock_acquire_read(struct rwlock *rwlock)
+{
+	KASSERT(rwlock != NULL);
+
+	lock_acquire(rwlock->rwlock_lock);
+
+	lock_acquire(rwlock->rwlock_read_available);
+
+	if (++rwlock->readers == 1) {
+		lock_acquire(rwlock->rwlock_writer);
+	}
+
+	lock_release(rwlock->rwlock_read_available);
+	
+	lock_release(rwlock->rwlock_lock);
+}
+
+void 
+rwlock_release_read(struct rwlock *rwlock)
+{
+	KASSERT(rwlock != NULL);
+
+	lock_acquire(rwlock->rwlock_lock);
+	
+	KASSERT(rwlock->readers > 0);
+	if (--rwlock->readers == 0) {
+		lock_release(rwlock->rwlock_writer);
+	}
+	
+	lock_release(rwlock->rwlock_lock);
+}
+
+void 
+rwlock_acquire_write(struct rwlock *rwlock) 
+{
+	KASSERT(rwlock != NULL);
+
+	lock_acquire(rwlock->rwlock_read_available);
+	lock_acquire(rwlock->rwlock_writer);
+}
+
+
+void 
+rwlock_release_write(struct rwlock *rwlock) 
+{
+	KASSERT(rwlock != NULL);
+
+	lock_release(rwlock->rwlock_read_available);
+	lock_release(rwlock->rwlock_writer);
 }

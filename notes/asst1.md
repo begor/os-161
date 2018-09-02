@@ -21,3 +21,19 @@ CVs are used to sleep until some condition becomes true.
 ## Implementation
 
 CVs are implemented using Wait Channel to put awaiting for condition thread to sleep, and locks for ensuring atomic operations. Also, there is internal Spin Lock to protect critical sections of implementation.
+
+
+# RW Locks
+
+RWs are implemented in `synch.h`/`sync.c`.
+
+RW lock is a lock that threads can acquire in one of two ways: read mode or write mode. Read mode does not conflict with read mode, but read mode conflicts with write mode and write mode conflicts with write mode. The result is that many threads can acquire the lock in read mode, or one thread can acquire the lock in write mode. 
+
+One important issue of RW locks is the one of starvation: when there are a lot of readers, and one writer waits infinitely to acquire the lock. 
+
+## Implementation
+
+They're implemented using three locks: 
+1) `rwlock_lock` is used in a classical sense, to protect critical sections of RW's code.
+2) `rwlock_writer` is used for writers to acquire the lock. Since there is only one writer possible in a momemnt of time, simple lock is sufficient for that.
+3) `rwlock_read_available` this is used to prevent starvation. If we have our RW lock acquired in read mode, and then come the writer to acquire it in write mode, we shouldn't allow any more reader to acquire it (even though it's not violates the API).
