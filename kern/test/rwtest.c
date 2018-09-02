@@ -258,12 +258,25 @@ int rwtest2(int nargs, char **args) {
 	return 0;
 }
 
+// Tests reader-writer lock error handling. Panics on success.
 int rwtest3(int nargs, char **args) {
 	(void)nargs;
 	(void)args;
 
-	kprintf_n("rwt3 unimplemented\n");
+	kprintf_n("Starting rwt3...\n");
+	testlock = rwlock_create("testlock");
+	if (testlock == NULL) {
+		panic("rwt3: lock_create failed\n");
+	}
+	
+	secprintf(SECRET, "Should panic...", "rwt3");
+	rwlock_release_read(testlock);
+
 	success(TEST161_FAIL, SECRET, "rwt3");
+
+	/* Don't do anything that could panic. */
+
+	testlock = NULL;
 
 	return 0;
 }
@@ -272,8 +285,23 @@ int rwtest4(int nargs, char **args) {
 	(void)nargs;
 	(void)args;
 
-	kprintf_n("rwt4 unimplemented\n");
+	kprintf_n("Starting rwt4...\n");
+	testlock = rwlock_create("testlock");
+	if (testlock == NULL) {
+		panic("rwt4: lock_create failed\n");
+	}
+
+	rwlock_acquire_read(testlock);
+	rwlock_release_read(testlock);
+	
+	secprintf(SECRET, "Should panic...", "rwt4");
+	rwlock_release_read(testlock);
+
 	success(TEST161_FAIL, SECRET, "rwt4");
+
+	/* Don't do anything that could panic. */
+
+	testlock = NULL;
 
 	return 0;
 }
@@ -282,8 +310,20 @@ int rwtest5(int nargs, char **args) {
 	(void)nargs;
 	(void)args;
 
-	kprintf_n("rwt5 unimplemented\n");
+	kprintf_n("Starting rwt5...\n");
+	testlock = rwlock_create("testlock");
+	if (testlock == NULL) {
+		panic("rwt5: lock_create failed\n");
+	}
+	
+	secprintf(SECRET, "Should panic...", "rwt5");
+	rwlock_release_write(testlock);
+
 	success(TEST161_FAIL, SECRET, "rwt5");
+
+	/* Don't do anything that could panic. */
+
+	testlock = NULL;
 
 	return 0;
 }
